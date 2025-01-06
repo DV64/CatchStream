@@ -1,0 +1,31 @@
+{
+    "theme": "cyan",
+    "auto_cleanup": true,
+    "log_retention_days": 30,
+    "audio_bitrate": "192k",
+    "compression_preset": "medium",
+    "download_path": "~/Downloads",
+    "default_quality": "high",
+    "max_concurrent_downloads": 3,
+    "auto_archive": false,
+    "notifications": true,
+    "thumbnail_quality": "high",
+    "interface": {
+        "show_file_size": true,
+        "show_eta": true,
+        "progress_bar_style": "detailed",
+        "auto_clear_completed": true
+    },
+    "performance": {
+        "cache_size": 100,
+        "chunk_size": 1024,
+        "buffer_size": 8192,
+        "max_retries": 5
+    },
+    "downloads": {
+        "auto_resume": true,
+        "verify_ssl": true,
+        "timeout": 30,
+        "rate_limit": 0
+    }
+}

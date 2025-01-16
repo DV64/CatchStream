@@ -642,7 +642,7 @@ class CatchStream:
     
     def __init__(self):
         # Version info
-        self.version = "1.0.0"
+        self.version = "1.0.1"  # Updated from 1.0.0
         self.author = "DV64"
         self.console = Console()
         
@@ -696,12 +696,12 @@ class CatchStream:
         banner = f"""[bold cyan]
 ╔══════════════════════════════════════════════════════════════════════╗
 ║   ______      __       __   _____ __                                 ║
-║  / ____/___ _/ /______/ /_ / ___// /_________  ____ _____ ___        ║
-║ / /   / __ `/ __/ ___/ __ \\\\__ \\/ __/ ___/ _ \\/ __ `/ __ `__ \\       ║
-║/ /___/ /_/ / /_/ /__/ / / /__/ / /_/ /  /  __/ /_/ / / / / / /       ║
-║\\____/\\__,_/\\__/\\___/_/ /_/____/\\__/_/   \\___/\\__,_/_/ /_/ /_/        ║
+║  / ____/___ _/ /______/ /_ / ___// /_________  ____ _____ ___       ║
+║ / /   / __ `/ __/ ___/ __ \\\\__ \\/ __/ ___/ _ \\/ __ `/ __ `__ \\     ║
+║/ /___/ /_/ / /_/ /__/ / / /__/ / /_/ /  /  __/ /_/ / / / / / /     ║
+║\\____/\\__,_/\\__/\\___/_/ /_/____/\\__/_/   \\___/\\__,_/_/ /_/ /_/     ║
 ║                                                                      ║
-║  [yellow]Version: {self.version}[/yellow]  •  [green]By: {self.author}[/green]  •  [blue]2025[/blue]                                ║
+║  [yellow]Version: {self.version}[/yellow]  •  [green]By: {self.author}[/green]  •  [blue]2024[/blue]        ║
 ╚══════════════════════════════════════════════════════════════════════╝[/bold cyan]"""
         
         self.console.print(banner)
@@ -1803,7 +1803,7 @@ class CatchStream:
             raise
 
     def _download_progress_hook(self, d):
-        """Handle download progress updates"""
+        """Handle download progress updates with enhanced information"""
         try:
             url = d.get('info_dict', {}).get('webpage_url', '')
             if url in self.active_downloads:
@@ -1817,19 +1817,20 @@ class CatchStream:
                         speed = d.get('speed', 0)
                         speed_str = f"{speed/1024:.1f} KB/s" if speed else "N/A"
                         
-                        # Update download info
+                        # Update download info with enhanced metrics
                         download.progress = percent
                         download.speed = speed_str
                         download.eta = d.get('eta', 'N/A')
                         download.downloaded_size = downloaded
                         download.size = total_bytes
                         
-                        # Update console display
+                        # Enhanced progress display with more details
                         self.console.print(
                             f"\r[cyan]Progress: {percent:.1f}% | "
                             f"Speed: {speed_str} | "
                             f"ETA: {download.eta} | "
-                            f"{self.format_size(downloaded)}/{self.format_size(total_bytes)}[/cyan]",
+                            f"Size: {self.format_size(downloaded)}/{self.format_size(total_bytes)} | "
+                            f"Quality: {download.video_quality}[/cyan]",
                             end=''
                         )
                         
@@ -1837,15 +1838,24 @@ class CatchStream:
                     download.status = DownloadStatus.COMPLETED
                     download.end_time = datetime.now()
                     download.progress = 100.0
-                    self.console.print("\n[green]Download completed![/green]")
+                    duration = download.end_time - download.start_time
+                    self.console.print(
+                        f"\n[green]Download completed successfully![/green]\n"
+                        f"[cyan]Total time: {duration.total_seconds():.1f}s | "
+                        f"Average speed: {self.format_speed(download.size/duration.total_seconds())}[/cyan]"
+                    )
                     
                 elif d['status'] == 'error':
                     download.status = DownloadStatus.FAILED
                     download.error = str(d.get('error', 'Unknown error'))
-                    self.console.print(f"\n[red]Download error: {download.error}[/red]")
+                    self.console.print(
+                        f"\n[red]Download failed: {download.error}[/red]\n"
+                        f"[yellow]Attempt {download.retry_count + 1} of {self.config['download_options']['max_retries']}[/yellow]"
+                    )
                     
         except Exception as e:
-            logging.error(f"Error in progress hook: {str(e)}")
+            logging.error(f"Progress hook error: {str(e)}")
+            self.console.print(f"\n[red]Progress tracking error: {str(e)}[/red]")
 
     def _clean_progress_hook(self, d: Dict[str, Any]) -> None:
         try:

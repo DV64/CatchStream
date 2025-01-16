@@ -1,49 +1,36 @@
 # CatchStream Changelog
 
-## [1.0.0] - 2025-01-06
+## [1.0.1] - 2025-01-16
 
 ### Added
-- Core video downloading functionality with yt-dlp
-- Quality presets (high/medium/low) for video downloads
-- Advanced video processing capabilities (extract audio, compress, watermark, trim)
-- Download queue management system with concurrent downloads
-- Progress tracking with detailed status updates
-- Database management for downloads and favorites
-- Download statistics and analytics
-- Favorites management system
-- Archive functionality for completed downloads
-- Download scheduling system
-- Comprehensive error handling and logging
-- Configuration system with customizable settings
-- Rich CLI interface with progress bars and tables
-- File integrity validation
-- Resource cleanup management
-- Cross-platform path handling
-- Asynchronous operations support
-- Cache management for video info
-- Download resume capability
+- Enhanced progress display with quality information
+- Download duration and average speed statistics
+- Retry attempt counter in error messages
+- More detailed error reporting
 
-### Features
-- Interactive menu system with multiple options
-- Real-time download progress display
-- File size and speed formatting
-- Download status tracking
-- Batch download support
-- Playlist download capability
-- Custom filename support
-- Multiple quality preset options
-- Video processing options
-- Statistics tracking and display
-- Favorites management interface
-- Archive management system
+### Changed
+- Updated banner layout for better alignment
+- Improved progress formatting with size labels
+- Enhanced error messages for better clarity
+- Updated copyright year to 2024
 
-### Technical
-- Asynchronous download handling
-- Thread pool for concurrent operations
-- SQLite database integration
-- FFmpeg integration for video processing
-- Resource management and cleanup
-- Error logging system
-- Configuration file management
-- Cross-platform compatibility
-- Memory optimization 
+### Fixed
+- Progress display formatting inconsistencies
+- Error message clarity and consistency
+- Banner alignment issues
+- Download status message formatting
+
+### Improved
+- Download progress tracking accuracy
+- Error handling and reporting
+- Overall user interface consistency
+- Code documentation and comments
+
+## [1.0.0] - 2025-01-06
+
+### Initial Release
+- Basic video download functionality
+- Multiple quality preset support
+- Download queue management
+- Progress tracking
+- Basic error handling 

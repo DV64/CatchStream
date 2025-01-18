@@ -642,7 +642,7 @@ class CatchStream:
     
     def __init__(self):
         # Version info
-        self.version = "1.0.1"  # Updated from 1.0.0
+        self.version = "1.0.2" 
         self.author = "DV64"
         self.console = Console()
         
@@ -696,12 +696,12 @@ class CatchStream:
         banner = f"""[bold cyan]
 ╔══════════════════════════════════════════════════════════════════════╗
 ║   ______      __       __   _____ __                                 ║
-║  / ____/___ _/ /______/ /_ / ___// /_________  ____ _____ ___       ║
-║ / /   / __ `/ __/ ___/ __ \\\\__ \\/ __/ ___/ _ \\/ __ `/ __ `__ \\     ║
-║/ /___/ /_/ / /_/ /__/ / / /__/ / /_/ /  /  __/ /_/ / / / / / /     ║
-║\\____/\\__,_/\\__/\\___/_/ /_/____/\\__/_/   \\___/\\__,_/_/ /_/ /_/     ║
+║  / ____/___ _/ /______/ /_ / ___// /_________  ____ _____ ___        ║
+║ / /   / __ `/ __/ ___/ __ \\\\__ \\/ __/ ___/ _ \\/ __ `/ __ `__ \\       ║
+║/ /___/ /_/ / /_/ /__/ / / /__/ / /_/ /  /  __/ /_/ / / / / / /       ║
+║\\____/\\__,_/\\__/\\___/_/ /_/____/\\__/_/   \\___/\\__,_/_/ /_/ /_/        ║
 ║                                                                      ║
-║  [yellow]Version: {self.version}[/yellow]  •  [green]By: {self.author}[/green]  •  [blue]2024[/blue]        ║
+║  [yellow]Version: {self.version}[/yellow]  •  [green]By: {self.author}[/green]  •  [blue]2025[/blue]                                ║
 ╚══════════════════════════════════════════════════════════════════════╝[/bold cyan]"""
         
         self.console.print(banner)
@@ -717,17 +717,33 @@ class CatchStream:
             self.console.print(stats)
 
     async def download_video(self, url: str, format_id: str = "best", 
-                            filename: Optional[str] = None, quality: str = "medium") -> bool:
-        """Async video download method"""
+                            filename: Optional[str] = None, quality: str = "medium",
+                            ydl_opts: Optional[dict] = None) -> bool:
+        """Async video download method with authentication support"""
         try:
-            return await self._async_download_video(url, format_id, filename, quality)
+            # Start with base options
+            download_opts = {
+                'format': self._get_quality_options(quality)['format'],
+                'outtmpl': os.path.join(self.paths['downloads']['video'], '%(title)s.%(ext)s'),
+                'quiet': True,
+                'no_warnings': True,
+                'progress_hooks': [self._update_progress_hook],
+            }
+            
+            # Update with any provided options (like authentication)
+            if ydl_opts:
+                download_opts.update(ydl_opts)
+                
+            return await self._async_download_video(url, format_id, filename, quality, download_opts)
+            
         except Exception as e:
             logging.error(f"Download error: {str(e)}")
             self.console.print(f"\n[red]Download error: {str(e)}[/red]")
             return False
 
     async def _async_download_video(self, url: str, format_id: str = "best", 
-                                filename: Optional[str] = None, quality: str = None) -> bool:
+                                filename: Optional[str] = None, quality: str = None,
+                                ydl_opts: Optional[dict] = None) -> bool:
         """Async implementation for video downloading"""
         async with self.download_semaphore:
             try:
@@ -1451,7 +1467,7 @@ class CatchStream:
                 self.console.print("\n[bold red]✗ Download failed![/bold red]")
 
     async def show_playlist_menu(self):
-        """Display interface for playlist download"""
+        """Display interface for playlist download with authentication support"""
         self.console.clear()
         panel = Panel(
             "[bold cyan]Playlist Download[/bold cyan]\n\n"
@@ -1463,63 +1479,270 @@ class CatchStream:
         
         url = Prompt.ask("[cyan]Enter playlist URL[/cyan]")
         
-        # Show playlist info
+        # Ask for authentication if needed
+        use_auth = Confirm.ask(
+            "\n[yellow]Do you need authentication for private/restricted videos?[/yellow]",
+            default=False
+        )
+        
+        # Enhanced yt-dlp options
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': 'in_playlist',  # Changed this to better handle playlists
+            'ignoreerrors': True,  # Skip unavailable videos
+            'playlist_items': '1:',  # Get all items
+            'extractor_retries': 3,
+            'file_access_retries': 3,
+            'fragment_retries': 3
+        }
+        
+        if use_auth:
+            # Add browser cookie options
+            browsers = ['chrome', 'firefox', 'edge', 'safari', 'opera']
+            browser = Prompt.ask(
+                "[cyan]Select browser to get cookies from[/cyan]",
+                choices=browsers,
+                default='chrome'
+            )
+            ydl_opts['cookiesfrombrowser'] = (browser,)
+            
+            # Optionally allow manual cookie file
+            use_cookie_file = Confirm.ask(
+                "[yellow]Use custom cookies file instead?[/yellow]",
+                default=False
+            )
+            if use_cookie_file:
+                cookie_file = Prompt.ask("[cyan]Enter path to cookies file[/cyan]")
+                if os.path.exists(cookie_file):
+                    ydl_opts['cookiefile'] = cookie_file
+                else:
+                    self.console.print("[red]Cookie file not found![/red]")
+                    return
+
         try:
-            with YoutubeDL() as ydl:
+            with YoutubeDL(ydl_opts) as ydl:
+                # First try to extract playlist ID
+                if 'list=' in url:
+                    playlist_id = url.split('list=')[1].split('&')[0]
+                    playlist_url = f'https://www.youtube.com/playlist?list={playlist_id}'
+                else:
+                    playlist_url = url
+
+                self.console.print("\n[yellow]Fetching playlist information...[/yellow]")
+                
+                # First get playlist info
                 playlist_info = await asyncio.get_running_loop().run_in_executor(
                     None,
-                    lambda: ydl.extract_info(url, download=False)
+                    lambda: ydl.extract_info(playlist_url, download=False)
                 )
                 
-            info_table = Table(show_header=False, box=box.SIMPLE)
-            info_table.add_column("Property", style="yellow")
-            info_table.add_column("Value", style="white")
-            
-            info_table.add_row("Title", playlist_info.get('title', 'Unknown'))
-            info_table.add_row("Channel", playlist_info.get('uploader', 'Unknown'))
-            info_table.add_row("Videos", str(len(playlist_info.get('entries', []))))
-            
-            self.console.print("\n[bold green]Playlist Information:[/bold green]")
-            self.console.print(info_table)
-            
-            download_all = Confirm.ask("\n[cyan]Download all videos?[/cyan]", default=True)
-            
-            if not download_all:
-                # Show video selection table
-                videos_table = Table(
-                    title="Available Videos",
-                    show_header=True,
-                    header_style="bold cyan"
-                )
-                videos_table.add_column("#", style="yellow")
-                videos_table.add_column("Title", style="white")
-                videos_table.add_column("Duration", style="cyan")
+                if not playlist_info:
+                    self.console.print("[red]Could not fetch playlist information![/red]")
+                    return
+                    
+                # Get valid entries
+                entries = playlist_info.get('entries', [])
+                valid_videos = [v for v in entries if v and v.get('title')]
                 
-                for i, video in enumerate(playlist_info['entries'], 1):
-                    videos_table.add_row(
-                        str(i),
-                        video.get('title', 'Unknown'),
-                        str(timedelta(seconds=video.get('duration', 0)))
+                if not valid_videos:
+                    self.console.print("[red]No accessible videos found in playlist![/red]")
+                    return
+
+                # Show playlist information
+                info_table = Table(show_header=False, box=box.SIMPLE)
+                info_table.add_column("Property", style="yellow")
+                info_table.add_column("Value", style="white")
+                
+                info_table.add_row("Title", playlist_info.get('title', 'Unknown'))
+                info_table.add_row("Channel", playlist_info.get('uploader', 'Unknown'))
+                info_table.add_row(
+                    "Videos", 
+                    f"{len(valid_videos)} available (of {len(entries)} total)"
+                )
+                
+                self.console.print("\n[bold green]Playlist Information:[/bold green]")
+                self.console.print(info_table)
+
+                # Calculate and show size information first
+                await self._show_size_information(valid_videos)
+                self.console.print("\n[cyan]Please review the size information above before proceeding.[/cyan]")
+                
+                if not Confirm.ask("\nContinue with download?", default=True):
+                    return
+
+                # Ask for download preferences
+                download_all = Confirm.ask(
+                    f"\n[cyan]Download all {len(valid_videos)} available videos?[/cyan]",
+                    default=True
+                )
+                
+                if not download_all:
+                    # Show video selection table
+                    videos_table = Table(
+                        title="Available Videos",
+                        show_header=True,
+                        header_style="bold cyan"
                     )
+                    videos_table.add_column("#", style="yellow")
+                    videos_table.add_column("Title", style="white")
+                    videos_table.add_column("Duration", style="cyan")
+                    videos_table.add_column("Status", style="green")
+                    
+                    for i, video in enumerate(valid_videos, 1):
+                        duration = str(timedelta(seconds=int(video.get('duration', 0))))
+                        videos_table.add_row(
+                            str(i),
+                            video.get('title', 'Unknown'),
+                            duration,
+                            "Available"
+                        )
+                    
+                    self.console.print(videos_table)
+                    indices = Prompt.ask(
+                        "\n[cyan]Enter video numbers (comma-separated)[/cyan]"
+                    )
+                    try:
+                        selected_indices = [int(i.strip())-1 for i in indices.split(",")]
+                        valid_videos = [valid_videos[i] for i in selected_indices if 0 <= i < len(valid_videos)]
+                    except (ValueError, IndexError):
+                        self.console.print("[red]Invalid selection![/red]")
+                        return
                 
-                self.console.print(videos_table)
-                indices = Prompt.ask(
-                    "\n[cyan]Enter video numbers (comma-separated)[/cyan]"
+                quality = Prompt.ask(
+                    "\n[cyan]Select quality[/cyan]",
+                    choices=["low", "medium", "high"],
+                    default="medium"
                 )
-                selected_indices = [int(i.strip()) for i in indices.split(",")]
-            
-            quality = Prompt.ask(
-                "\n[cyan]Select quality[/cyan]",
-                choices=["low", "medium", "high"],
-                default="medium"
-            )
-            
-            with Progress() as progress:
-                task = progress.add_task("Downloading playlist...", total=100)
-                await self.process_playlist(url, download_all, quality)
+                
+                # Update download options
+                download_opts = ydl_opts.copy()
+                download_opts.update(self._get_quality_options(quality))
+                download_opts['extract_flat'] = False  # Disable flat extraction for actual download
+                
+                # Start downloading
+                total_videos = len(valid_videos)
+                with Progress() as progress:
+                    task = progress.add_task(
+                        f"Downloading playlist ({total_videos} videos)...",
+                        total=total_videos
+                    )
+                    
+                    for i, video in enumerate(valid_videos, 1):
+                        video_url = video.get('url') or f"https://www.youtube.com/watch?v={video.get('id')}"
+                        self.console.print(f"\n[cyan]Downloading video {i}/{total_videos}:[/cyan] {video.get('title', 'Unknown')}")
+                        
+                        try:
+                            await self.download_video(
+                                video_url,
+                                quality=quality,
+                                ydl_opts=download_opts
+                            )
+                        except Exception as e:
+                            self.console.print(f"[red]Error downloading video: {str(e)}[/red]")
+                        finally:
+                            progress.update(task, advance=1)
+                    
+                self.console.print("\n[green]Playlist download completed![/green]")
                 
         except Exception as e:
             self.console.print(f"\n[bold red]Error: {str(e)}[/bold red]")
+            logging.error(f"Playlist download error: {str(e)}")
+
+    async def _show_size_information(self, videos: list) -> None:
+        """Display size information for different quality options"""
+        try:
+            self.console.print("\n[bold cyan]Calculating sizes for different qualities...[/bold cyan]")
+            
+            sizes = {'low': 0, 'medium': 0, 'high': 0}
+            
+            with Progress() as progress:
+                task = progress.add_task("Calculating...", total=len(videos))
+                
+                for video in videos:
+                    for quality in sizes.keys():
+                        size = await self._calculate_size_for_quality(video, quality)
+                        sizes[quality] += size
+                    progress.update(task, advance=1)
+            
+            # Create size information table
+            size_table = Table(
+                title="Estimated Download Sizes",
+                show_header=True,
+                header_style="bold cyan",
+                box=box.ROUNDED
+            )
+            
+            size_table.add_column("Quality", style="yellow")
+            size_table.add_column("Resolution", style="cyan")
+            size_table.add_column("Total Size", style="green")
+            size_table.add_column("Size per Video (Avg)", style="blue")
+            
+            for quality, total_size in sizes.items():
+                resolution = {
+                    'low': '480p',
+                    'medium': '720p',
+                    'high': '1080p'
+                }[quality]
+                
+                avg_size = total_size / len(videos) if videos else 0
+                
+                size_table.add_row(
+                    quality.title(),
+                    resolution,
+                    self.format_size(total_size),
+                    self.format_size(avg_size)
+                )
+            
+            self.console.print(size_table)
+            
+            # Show storage warning if needed
+            free_space = shutil.disk_usage(self.paths['downloads']['video']).free
+            max_size = max(sizes.values())
+            
+            if max_size > free_space:
+                self.console.print(
+                    "\n[bold red]Warning:[/bold red] Not enough free storage space!\n"
+                    f"Required: {self.format_size(max_size)}\n"
+                    f"Available: {self.format_size(free_space)}"
+                )
+            elif max_size > (free_space * 0.9):
+                self.console.print(
+                    "\n[bold yellow]Note:[/bold yellow] Download may use most of your free storage space"
+                )
+                
+        except Exception as e:
+            self.console.print(f"[red]Error calculating sizes: {str(e)}[/red]")
+            logging.error(f"Size calculation error: {str(e)}")
+
+    async def _calculate_size_for_quality(self, video_info: dict, quality: str) -> int:
+        """Calculate video size for a specific quality"""
+        try:
+            formats = video_info.get('formats', [])
+            quality_heights = {
+                'low': 480,
+                'medium': 720,
+                'high': 1080
+            }
+            target_height = quality_heights[quality]
+            
+            # Find best matching format
+            best_format = None
+            for fmt in formats:
+                height = fmt.get('height', 0)
+                if height and height <= target_height:
+                    if not best_format or height > best_format.get('height', 0):
+                        best_format = fmt
+            
+            if best_format and best_format.get('filesize'):
+                return best_format['filesize']
+            elif best_format and best_format.get('filesize_approx'):
+                return best_format['filesize_approx']
+                
+            return 0
+        except Exception as e:
+            logging.error(f"Size calculation error: {str(e)}")
+            return 0
 
     async def show_batch_download_menu(self):
         """Display interface for batch download"""
@@ -1721,28 +1944,87 @@ class CatchStream:
                 break
             self.handle_favorite_command(cmd)
 
-    async def process_playlist(self, url: str, download_all: bool, quality: str):
+    async def process_playlist(self, url: str, download_all: bool, quality: str, ydl_opts: dict):
+        """Process playlist download with better error handling and authentication"""
         try:
-            with YoutubeDL() as ydl:
+            # First get playlist info with authentication
+            with YoutubeDL(ydl_opts) as ydl:
                 playlist_info = await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: ydl.extract_info(url, download=False)
                 )
                 
-                videos = playlist_info['entries']
-                
-                if not download_all:
-                    # Show video selection menu
-                    for i, video in enumerate(videos, 1):
-                        self.console.print(f"{i}. {video['title']}")
-                    selection = Prompt.ask("Enter video numbers (comma-separated)")
-                    indices = [int(i)-1 for i in selection.split(",")]
-                    videos = [videos[i] for i in indices]
-                
-                for video in videos:
-                    await self.download_video(video['webpage_url'], quality=quality)
+                if not playlist_info or 'entries' not in playlist_info:
+                    self.console.print("[red]Could not extract playlist information![/red]")
+                    return
                     
+                # Filter out None/invalid entries and get valid videos
+                videos = [v for v in playlist_info['entries'] if v is not None]
+                
+                if not videos:
+                    self.console.print("[red]No accessible videos found in playlist![/red]")
+                    return
+                    
+                if not download_all:
+                    # Show video selection menu with better formatting
+                    videos_table = Table(
+                        title="Available Videos",
+                        show_header=True,
+                        header_style="bold cyan"
+                    )
+                    videos_table.add_column("#", style="yellow")
+                    videos_table.add_column("Title", style="white")
+                    videos_table.add_column("Duration", style="cyan")
+                    
+                    for i, video in enumerate(videos, 1):
+                        duration = str(timedelta(seconds=int(video.get('duration', 0))))
+                        videos_table.add_row(
+                            str(i),
+                            video.get('title', 'Unknown'),
+                            duration
+                        )
+                    
+                    self.console.print(videos_table)
+                    selection = Prompt.ask("Enter video numbers (comma-separated)")
+                    try:
+                        indices = [int(i.strip())-1 for i in selection.split(",")]
+                        videos = [videos[i] for i in indices if 0 <= i < len(videos)]
+                    except (ValueError, IndexError):
+                        self.console.print("[red]Invalid selection![/red]")
+                        return
+                
+                # Show download progress
+                total_videos = len(videos)
+                with Progress() as progress:
+                    task = progress.add_task(
+                        f"Downloading playlist ({total_videos} videos)...",
+                        total=total_videos
+                    )
+                    
+                    for i, video in enumerate(videos, 1):
+                        video_url = video.get('webpage_url') or video.get('url')
+                        if not video_url:
+                            continue
+                            
+                        self.console.print(f"\n[cyan]Downloading video {i}/{total_videos}:[/cyan] {video.get('title', 'Unknown')}")
+                        
+                        try:
+                            # Pass authentication options to download
+                            await self.download_video(
+                                video_url,
+                                quality=quality,
+                                ydl_opts=ydl_opts
+                            )
+                        except Exception as e:
+                            self.console.print(f"[red]Error downloading video: {str(e)}[/red]")
+                            continue
+                        finally:
+                            progress.update(task, advance=1)
+                            
+                self.console.print("\n[green]Playlist download completed![/green]")
+                
         except Exception as e:
+            self.console.print(f"[red]Playlist processing error: {str(e)}[/red]")
             logging.error(f"Playlist processing error: {str(e)}")
 
     def format_size(self, size_bytes: int) -> str:
@@ -2136,6 +2418,43 @@ class CatchStream:
         except Exception as e:
             logging.error(f"Notification error: {str(e)}")
 
+    def _get_quality_options(self, quality: str) -> dict:
+        """Get yt-dlp options for selected quality"""
+        quality_opts = {
+            'low': {
+                'format': 'bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best',
+                'video_quality': '480p',
+                'format_sort': ['res:480', 'ext:mp4:m4a']
+            },
+            'medium': {
+                'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+                'video_quality': '720p',
+                'format_sort': ['res:720', 'ext:mp4:m4a']
+            },
+            'high': {
+                'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best',
+                'video_quality': '1080p',
+                'format_sort': ['res:1080', 'ext:mp4:m4a']
+            }
+        }
+        
+        # Add common options for all qualities
+        base_opts = {
+            'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
+            'prefer_ffmpeg': True,
+            'keepvideo': True
+        }
+        
+        # Get quality specific options with fallback to medium
+        opts = quality_opts.get(quality, quality_opts['medium']).copy()
+        opts.update(base_opts)
+        
+        return opts
+
 class StatisticsManager:
     def __init__(self, db_manager: DatabaseManager):
         self.db = db_manager
@@ -2276,10 +2595,10 @@ class DownloadScheduler:
                 downloads_to_trigger = []
                 
                 with self._lock:
-                    for url, info in list(self._scheduled_downloads.items()):  # Fixed attribute name
+                    for url, info in list(self._scheduled_downloads.items()):  
                         if now >= info['time']:
                             downloads_to_trigger.append((url, info))
-                            del self._scheduled_downloads[url]  # Fixed attribute name
+                            del self._scheduled_downloads[url]  
                 
                 for url, info in downloads_to_trigger:
                     asyncio.run_coroutine_threadsafe(

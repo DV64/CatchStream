@@ -1,4 +1,38 @@
-# CatchStream Changelog
+# Changelog
+
+## [1.0.2] - 2025-01-18
+
+### Added
+- Size calculation for playlists and videos before download
+- Storage space checks and warnings
+- Quality-specific size estimates
+- Size information table with resolution details
+- Average size per video calculation
+- Storage space validation
+- Browser cookie authentication support
+- Custom cookie file support
+
+### Changed
+- Improved playlist extraction and validation
+- Better handling of private/unavailable videos
+- Enhanced authentication options
+- More detailed download progress information
+- Better error handling for inaccessible videos
+- Updated quality options with format sorting
+
+### Fixed
+- Private video access issues
+- Playlist extraction reliability
+- Size calculation accuracy
+- Authentication handling
+- Progress tracking for playlist downloads
+
+### Improved
+- Download size estimation accuracy
+- Storage space management
+- Authentication workflow
+- Overall user experience with size information
+- Error messages and user guidance
 
 ## [1.0.1] - 2025-01-16
 
